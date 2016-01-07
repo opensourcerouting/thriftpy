@@ -136,6 +136,10 @@ class TClient(object):
         if oprot is not None:
             self._oprot = oprot
         self._seqid = 0
+        self._reverse_proc = None
+
+    def set_reverse(self, processor):
+        self._reverse_proc = processor
 
     def __getattr__(self, _api):
         if _api in self._service.thrift_services:
@@ -168,12 +172,34 @@ class TClient(object):
         self._oprot.trans.flush()
 
     def _recv(self, _api):
-        fname, mtype, rseqid = self._iprot.read_message_begin()
-        if mtype == TMessageType.EXCEPTION:
-            x = TApplicationException()
-            x.read(self._iprot)
-            self._iprot.read_message_end()
-            raise x
+        while True:
+            fname, mtype, rseqid = self._iprot.read_message_begin()
+            if mtype == TMessageType.EXCEPTION:
+                x = TApplicationException()
+                x.read(self._iprot)
+                self._iprot.read_message_end()
+                raise x
+
+            if mtype in (TMessageType.CALL, TMessageType.ONEWAY):
+                class Wrap(object):
+                    def __init__(self2):
+                        self2._popped = False
+                    def read_message_begin(self2):
+                        if self2._popped:
+                            return self._iprot.read_message_begin()
+                        self2._popped = True
+                        return (fname, mtype, rseqid)
+                    def __getattr__(self2, name):
+                        return getattr(self._iprot, name)
+
+                if self._reverse_proc is not None:
+                    self._reverse_proc.process(Wrap(), self._oprot)
+                else:
+                    self._iprot.skip(TType.STRUCT)
+                    self._iprot.read_message_end()
+            else:
+                break
+
         result = getattr(self._service, _api + "_result")()
         result.read(self._iprot)
         self._iprot.read_message_end()
@@ -194,11 +220,24 @@ class TClient(object):
         if hasattr(result, "success"):
             raise TApplicationException(TApplicationException.MISSING_RESULT)
 
+    def reverse(self):
+        if self._reverse_proc is None:
+            raise ValueError('Trying to go into reverse mode without processor.')
+        while True:
+            self._reverse_proc.process(self._iprot, self._oprot)
+
     def close(self):
         self._iprot.trans.close()
         if self._iprot != self._oprot:
             self._oprot.trans.close()
 
+
+def thrift_pass_iprot(func):
+    """Decorator for methods on Thrift RPC implementations.
+    Indicates to TProcessor that iprot should be passed as keyword arg.
+    """
+    func.thrift_pass_iprot = True
+    return func
 
 class TProcessor(object):
     """Base class for procsessor, which works on two streams."""
@@ -224,7 +263,10 @@ class TProcessor(object):
 
         def call():
             f = getattr(self._handler, api)
-            return f(*(args.__dict__[k] for k in api_args))
+            kwa = {}
+            if hasattr(f, 'thrift_pass_iprot'):
+                kwa['iprot'] = iprot
+            return f(*(args.__dict__[k] for k in api_args), **kwa)
 
         return api, seqid, result, call
 
