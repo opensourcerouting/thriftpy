@@ -1,0 +1,27 @@
+Source: thriftpy
+Section: python
+Priority: optional
+Maintainer: Christian Franke <chris@opensourcerouting.org>
+Build-Depends: debhelper (>= 9),
+ dh-python,
+ python-all (>= 2.6.6-3), python-setuptools,
+ cython
+Standards-Version: 3.9.6.1
+Homepage: https://thriftpy.readthedocs.org/
+X-Python-Version: >= 2.6
+Vcs-Git: https://git.netdef.org/scm/osr/thriftpy.git
+Vcs-Browser: https://git.netdef.org/projects/OSR/repos/thriftpy/
+
+Package: python-thriftpy
+Architecture: any
+Depends: ${python:Depends}, ${shlibs:Depends}, ${misc:Depends}
+Provides: ${python:Provides}
+Description: pure python implementation of Apache Thrift in a pythonic way
+ The official thrift python lib is not pythonic at all, it needs a
+ complicated process of installation, and the generated sdk is very
+ ugly. Everytime the thrift file changed you have to re-generate the sdk
+ which causes more pain in development.
+ .
+ ThriftPy helps that, it’s compatible with Apache Thrift so you no longer
+ need to install ‘thrift’ package, it can import thrift file on the fly
+ so you no longer need to re-generate the sdk again and again and again.
